@@ -843,6 +843,9 @@
     </div>
 
     <div id="article-modal" class="hidden fixed inset-0 z-50 flex justify-center bg-black/90 backdrop-blur-sm overflow-y-auto py-10 px-4">
+        <button id="modal-prev-btn" onclick="window.changeSlide(-1)" class="hidden absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white text-white hover:text-als-navy rounded-full flex items-center justify-center transition-colors z-20"><i class="fas fa-chevron-left"></i></button>
+            <button id="modal-next-btn" onclick="window.changeSlide(1)" class="hidden absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white text-white hover:text-als-navy rounded-full flex items-center justify-center transition-colors z-20"><i class="fas fa-chevron-right"></i></button>
+            <span id="modal-img-counter" class="hidden absolute top-4 right-4 z-20 bg-black/50 text-white text-xs px-2 py-1 rounded-full font-mono">1/1</span>
         <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl h-fit relative">
             <button onclick="window.closeModal()" class="absolute -top-10 right-0 md:-right-10 text-white hover:text-als-yellow transition-colors"><i class="fas fa-times text-2xl"></i></button>
             <div class="h-64 sm:h-[500px] w-full bg-black relative group rounded-t-2xl overflow-hidden">
@@ -873,3 +876,4 @@
     </div>
 </body>
 </html>
+
