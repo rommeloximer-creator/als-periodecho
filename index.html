@@ -315,55 +315,25 @@
             const article = articles.find(a => a.id === id);
             if (!article) return;
             
-           // --- Slideshow Logic ---
-        window.changeSlide = (direction) => {
-            // Check if viewerImages exists, if not create empty array
-            if (typeof viewerImages === 'undefined' || viewerImages.length <= 1) return;
-            
-            viewerIndex += direction;
-            if (viewerIndex >= viewerImages.length) viewerIndex = 0;
-            if (viewerIndex < 0) viewerIndex = viewerImages.length - 1;
-
-            const img = document.getElementById('modal-img');
-            img.style.opacity = '0'; 
-            setTimeout(() => {
-                img.src = viewerImages[viewerIndex];
-                img.style.opacity = '1';
-                // Update counter
-                const counter = document.getElementById('modal-img-counter');
-                if(counter) counter.textContent = `${viewerIndex + 1} / ${viewerImages.length}`;
-            }, 200);
-        }
-
-        window.viewArticle = (id) => {
-            const article = articles.find(a => a.id === id);
-            if (!article) return;
-            
-            // 1. Setup Images (Global variables must act as temporary storage)
-            window.viewerIndex = 0;
-            window.viewerImages = []; // Reset
-            
+            // 1. Setup Images
+            viewerIndex = 0;
             if (article.images && Array.isArray(article.images) && article.images.length > 0) {
-                window.viewerImages = article.images;
+                viewerImages = article.images;
             } else {
-                window.viewerImages = [article.imageUrl || ''];
+                viewerImages = [article.imageUrl || ''];
             }
 
             // 2. Setup Slideshow Buttons
             const prevBtn = document.getElementById('modal-prev-btn');
             const nextBtn = document.getElementById('modal-next-btn');
             const counter = document.getElementById('modal-img-counter');
-            const img = document.getElementById('modal-img');
 
-            // Reset Image
-            img.src = window.viewerImages[0];
-
-            if (window.viewerImages.length > 1) {
+            if (viewerImages.length > 1) {
                 if(prevBtn) prevBtn.classList.remove('hidden');
                 if(nextBtn) nextBtn.classList.remove('hidden');
                 if(counter) {
                     counter.classList.remove('hidden');
-                    counter.textContent = `1 / ${window.viewerImages.length}`;
+                    counter.textContent = `1 / ${viewerImages.length}`;
                 }
             } else {
                 if(prevBtn) prevBtn.classList.add('hidden');
@@ -373,29 +343,65 @@
 
             // 3. Setup Like Button
             const likeBtn = document.getElementById('like-btn');
-            if(likeBtn) {
-                const likeIcon = likeBtn.querySelector('i');
-                const likeCount = document.getElementById('like-count');
-                
-                likeBtn.disabled = false;
-                likeBtn.onclick = () => window.toggleLike(article.id);
-                likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
-                likeCount.innerText = article.likes || 0;
+            const likeIcon = likeBtn.querySelector('i');
+            const likeCount = document.getElementById('like-count');
+            likeBtn.disabled = false;
+            likeBtn.onclick = () => window.toggleLike(article.id);
+            likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
+            likeCount.innerText = article.likes || 0;
 
-                if (localStorage.getItem(`liked_${article.id}`)) {
-                    likeIcon.classList.remove('far');
-                    likeIcon.classList.add('fas', 'text-red-500');
-                    likeBtn.classList.add('opacity-75');
-                }
+            if (localStorage.getItem(`liked_${article.id}`)) {
+                likeIcon.classList.remove('far'); likeIcon.classList.add('fas', 'text-red-500'); likeBtn.classList.add('opacity-75');
             }
 
-            // 4. Fill Content
             document.getElementById('modal-title').textContent = article.title;
             document.getElementById('modal-category').textContent = article.category || 'News';
             document.getElementById('modal-date').textContent = new Date(article.createdAt?.seconds * 1000).toLocaleDateString() || '';
+            document.getElementById('modal-img').src = viewerImages[0];
             document.getElementById('modal-content').innerHTML = article.content.split('\n').map(p => p.trim() ? `<p class="mb-4">${p}</p>` : '').join('');
-            
             document.getElementById('article-modal').classList.remove('hidden');
+        }
+
+        window.closeModal = () => document.getElementById('article-modal').classList.add('hidden');
+
+        window.openPostForm = () => {
+            editingArticleId = null; 
+            document.getElementById('form-modal-title').textContent = "Write New Story";
+            document.getElementById('form-submit-btn').textContent = "Publish Story";
+            document.getElementById('new-post-form').reset();
+            currentArticleImages = [];
+            window.renderImageManager();
+            document.querySelector('input[name="post-img-source"][value="url"]').click();
+            document.getElementById('post-form-modal').classList.remove('hidden');
+        }
+
+        window.editArticle = (id) => {
+            const article = articles.find(a => a.id === id);
+            if (!article) return;
+            editingArticleId = id; 
+            document.getElementById('form-modal-title').textContent = "Edit Story";
+            document.getElementById('form-submit-btn').textContent = "Update Story";
+            document.getElementById('post-title').value = article.title;
+            document.getElementById('post-category').value = article.category;
+            document.getElementById('post-excerpt').value = article.excerpt;
+            document.getElementById('post-content').value = article.content;
+            
+            if (article.images && Array.isArray(article.images)) {
+                currentArticleImages = article.images;
+            } else if (article.imageUrl) {
+                currentArticleImages = [article.imageUrl];
+            } else {
+                currentArticleImages = [];
+            }
+            window.renderImageManager();
+            document.querySelector('input[name="post-img-source"][value="url"]').click();
+            document.getElementById('post-form-modal').classList.remove('hidden');
+        }
+
+        window.closePostForm = () => {
+            document.getElementById('post-form-modal').classList.add('hidden');
+            document.getElementById('new-post-form').reset();
+            editingArticleId = null;
         }
 
         window.submitPost = async (event) => {
@@ -841,9 +847,9 @@
             <button onclick="window.closeModal()" class="absolute -top-10 right-0 md:-right-10 text-white hover:text-als-yellow transition-colors"><i class="fas fa-times text-2xl"></i></button>
             <div class="h-64 sm:h-[500px] w-full bg-black relative group rounded-t-2xl overflow-hidden">
                 <img id="modal-img" src="" class="w-full h-full object-contain transition-opacity duration-300">
-                <button id="modal-prev-btn" onclick="window.changeSlide(-1)" class="hidden absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white text-white hover:text-als-navy rounded-full flex items-center justify-center transition-colors z-20"><i class="fas fa-chevron-left"></i></button>
-                <button id="modal-next-btn" onclick="window.changeSlide(1)" class="hidden absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white text-white hover:text-als-navy rounded-full flex items-center justify-center transition-colors z-20"><i class="fas fa-chevron-right"></i></button>
-                <span id="modal-img-counter" class="hidden absolute top-4 right-4 z-20 bg-black/50 text-white text-xs px-2 py-1 rounded-full font-mono">1/1</span>
+                <button id="modal-prev-btn" onclick="window.changeSlide(-1)" class="hidden absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white text-white hover:text-als-navy rounded-full flex items-center justify-center transition-colors"><i class="fas fa-chevron-left"></i></button>
+                <button id="modal-next-btn" onclick="window.changeSlide(1)" class="hidden absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/20 hover:bg-white text-white hover:text-als-navy rounded-full flex items-center justify-center transition-colors"><i class="fas fa-chevron-right"></i></button>
+                <span id="modal-img-counter" class="hidden absolute top-4 right-4 bg-black/50 text-white text-xs px-2 py-1 rounded-full font-mono">1/1</span>
             </div>
             <div class="px-8 sm:px-12 pt-8">
                 <div class="flex items-center justify-between mb-4">
@@ -867,4 +873,3 @@
     </div>
 </body>
 </html>
-
