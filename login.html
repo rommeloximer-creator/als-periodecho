@@ -7,15 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        als: { navy: '#0f172a', teal: '#0e7490', yellow: '#fbbf24' }
-                    }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { colors: { als: { navy: '#0f172a', teal: '#0e7490', yellow: '#fbbf24' } } } } }
     </script>
 </head>
 <body class="bg-slate-100 h-screen flex items-center justify-center">
@@ -29,12 +21,12 @@
             <p class="text-slate-500 text-sm">Sign in to manage stories</p>
         </div>
 
-        <form onsubmit="event.preventDefault(); login();" class="space-y-4">
+        <form id="login-form" class="space-y-4">
             <div>
-                <label class="block text-sm font-bold text-slate-700 mb-1">Username</label>
+                <label class="block text-sm font-bold text-slate-700 mb-1">Email</label>
                 <div class="relative">
-                    <i class="fas fa-user absolute left-3 top-3 text-slate-400"></i>
-                    <input type="text" id="username" class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-als-teal focus:ring-1 focus:ring-als-teal" placeholder="Enter username">
+                    <i class="fas fa-envelope absolute left-3 top-3 text-slate-400"></i>
+                    <input type="email" id="email" required class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-als-teal focus:ring-1 focus:ring-als-teal" placeholder="admin@deped.gov.ph">
                 </div>
             </div>
 
@@ -42,15 +34,13 @@
                 <label class="block text-sm font-bold text-slate-700 mb-1">Password</label>
                 <div class="relative">
                     <i class="fas fa-lock absolute left-3 top-3 text-slate-400"></i>
-                    <input type="password" id="password" class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-als-teal focus:ring-1 focus:ring-als-teal" placeholder="••••••••">
+                    <input type="password" id="password" required class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-als-teal focus:ring-1 focus:ring-als-teal" placeholder="••••••••">
                 </div>
             </div>
 
-            <div id="error-message" class="hidden bg-red-50 text-red-500 text-xs p-3 rounded border border-red-200 text-center">
-                <i class="fas fa-exclamation-circle mr-1"></i> Invalid Credentials
-            </div>
+            <div id="error-message" class="hidden bg-red-50 text-red-500 text-xs p-3 rounded border border-red-200 text-center"></div>
 
-            <button type="submit" class="w-full bg-als-navy text-white font-bold py-3 rounded-lg hover:bg-als-teal transition-colors shadow-lg">
+            <button type="submit" id="submit-btn" class="w-full bg-als-navy text-white font-bold py-3 rounded-lg hover:bg-als-teal transition-colors shadow-lg">
                 Login Dashboard
             </button>
         </form>
@@ -62,7 +52,56 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
+        // Your Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyCgvnHGxu_G5euXHrIoov07GxS08CtvG4Y",
+            authDomain: "als-periodecho.firebaseapp.com",
+            projectId: "als-periodecho",
+            storageBucket: "als-periodecho.firebasestorage.app",
+            messagingSenderId: "969937604443",
+            appId: "1:969937604443:web:fead3fe0aa71a6f2d7147e"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const loginForm = document.getElementById('login-form');
+        const errorMsg = document.getElementById('error-message');
+        const submitBtn = document.getElementById('submit-btn');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // UI Loading State
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+            submitBtn.disabled = true;
+            errorMsg.classList.add('hidden');
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                
+                // Success! Save the UI flag and redirect
+                localStorage.setItem("isLoggedIn", "true");
+                window.location.href = "index.html"; 
+                
+            } catch (error) {
+                console.error(error);
+                submitBtn.innerHTML = 'Login Dashboard';
+                submitBtn.disabled = false;
+                
+                // Show Error
+                errorMsg.textContent = "Invalid Email or Password.";
+                if(error.code === 'auth/too-many-requests') errorMsg.textContent = "Too many attempts. Try again later.";
+                errorMsg.classList.remove('hidden');
+            }
+        });
+    </script>
 </body>
 </html>
