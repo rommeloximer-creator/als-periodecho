@@ -770,23 +770,31 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Images (Max 4)</label>
+                        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Gallery Images (Max 4)</label>
+                        
                         <div class="flex space-x-4 mb-2 text-sm">
                             <label class="flex items-center space-x-2 cursor-pointer"><input type="radio" name="post-img-source" value="url" checked onclick="toggleImageSource('url', 'post')" class="accent-als-teal"><span class="dark:text-slate-300">Link</span></label>
                             <label class="flex items-center space-x-2 cursor-pointer"><input type="radio" name="post-img-source" value="upload" onclick="toggleImageSource('upload', 'post')" class="accent-als-teal"><span class="dark:text-slate-300">Upload</span></label>
                         </div>
                         
-                        <div class="flex gap-2">
-                             <input type="url" id="post-img-input-url" placeholder="https://..." class="flex-1 px-3 py-1.5 text-sm rounded border dark:border-slate-600 dark:bg-slate-700 dark:text-white">
-                             <input type="file" id="post-img-input-file" accept="image/*" class="hidden flex-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-als-teal file:text-white hover:file:bg-als-navy">
-                             <button type="button" onclick="window.handleAddImage()" class="px-4 py-1.5 bg-als-teal text-white text-xs font-bold rounded hover:bg-als-navy transition-colors"><i class="fas fa-plus"></i> Add</button>
+                        <div class="flex gap-2 items-start">
+                             <input type="url" id="post-img-input-url" placeholder="Paste image link here..." class="flex-1 px-3 py-2 text-sm rounded-lg border dark:border-slate-600 dark:bg-slate-700 dark:text-white">
+                             
+                             <input type="file" id="post-img-input-file" accept="image/*" class="hidden">
+                             
+                             <div id="post-drop-zone" class="hidden flex-1 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-2 text-center cursor-pointer hover:border-als-teal transition-colors relative" 
+                                  onclick="document.getElementById('post-img-input-file').click()"
+                                  onchange="document.getElementById('post-img-input-file').files[0] && document.getElementById('upload-preview-text').classList.replace('text-slate-500', 'text-green-600')">
+                                 <p id="upload-preview-text" class="text-xs text-slate-500 py-1"><i class="fas fa-cloud-upload-alt mr-1"></i> Click to Select File</p>
+                             </div>
+
+                             <button type="button" onclick="window.handleAddImage()" class="px-4 py-2 bg-als-teal text-white text-sm font-bold rounded-lg hover:bg-als-navy transition-colors shadow-sm">
+                                <i class="fas fa-plus"></i> Add
+                             </button>
                         </div>
                         <p id="image-limit-msg" class="text-[10px] text-red-500 mt-1 hidden">Maximum 4 images allowed.</p>
                         
-                        <div id="image-manager-list" class="grid grid-cols-4 gap-2 mt-3"></div>
-                    </div>
-                </div>
-                <div><label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Excerpt</label><textarea id="post-excerpt" rows="2" class="w-full px-4 py-2 rounded-lg border dark:border-slate-600 dark:bg-slate-700 dark:text-white"></textarea></div>
+                        <div id="image-manager-list" class="grid grid-cols-4 gap-2 mt-3"></div>Excerpt</label><textarea id="post-excerpt" rows="2" class="w-full px-4 py-2 rounded-lg border dark:border-slate-600 dark:bg-slate-700 dark:text-white"></textarea></div>
                 <div><label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Content</label><textarea id="post-content" required rows="6" class="w-full px-4 py-2 rounded-lg border dark:border-slate-600 dark:bg-slate-700 dark:text-white"></textarea></div>
                 <div class="pt-4 flex justify-end gap-3"><button type="button" onclick="window.closePostForm()" class="px-6 py-2 rounded-full text-slate-600">Cancel</button><button type="submit" id="form-submit-btn" class="px-8 py-2 bg-als-yellow text-als-navy font-bold rounded-full">Publish</button></div>
             </form>
@@ -901,5 +909,6 @@
     </div>
 </body>
 </html>
+
 
 
