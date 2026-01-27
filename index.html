@@ -18,7 +18,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Configuration ---
         const firebaseConfig = {
@@ -66,7 +66,7 @@
 
         // --- Init ---
         async function initApp() {
-            // 1. ADMIN CHECK (Load Admin View if Logged In)
+            // 1. ADMIN CHECK
             if (localStorage.getItem("isLoggedIn") === "true") {
                 isAdminMode = true;
                 setTimeout(() => {
@@ -74,11 +74,9 @@
                     document.getElementById('home-section').classList.add('hidden');
                     document.getElementById('hero-section').classList.add('hidden');
                     
-                    // Show logout button
                     const controls = document.getElementById('admin-controls');
                     if(controls) controls.style.display = 'inline';
                     
-                    // Hide login link if logged in (so you don't see both)
                     const loginLink = document.getElementById('footer-login-link');
                     if(loginLink) loginLink.style.display = 'none';
                 }, 500); 
@@ -111,7 +109,6 @@
                 articles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 articles.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                 
-                // Refresh views
                 updateHeroSection();
                 renderHomeFeed(); 
                 if (isAdminMode) renderAdminDashboard();
@@ -135,8 +132,9 @@
             const container = document.getElementById('navbar-brand-area');
             
             if (siteSettings.brandingType === 'banner' && siteSettings.bannerUrl) {
+                // FIXED: White background, smaller height
                 container.innerHTML = `
-                    <div class="h-20 flex items-center overflow-hidden w-full">
+                    <div class="h-20 md:h-32 flex items-center justify-center overflow-hidden w-full bg-white border-b border-slate-200 pt-4 px-4">
                         <img src="${siteSettings.bannerUrl}" class="h-full w-auto object-contain max-w-full" alt="Site Banner">
                     </div>
                 `;
@@ -219,7 +217,6 @@
             }
         }
 
-        // --- Search & Filter Logic ---
         window.filterArticles = () => {
             const query = document.getElementById('search-input').value.toLowerCase();
             const filtered = articles.filter(a => 
@@ -253,12 +250,16 @@
                 card.className = "article-card bg-white dark:bg-slate-800 rounded-xl shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden border border-slate-100 dark:border-slate-700 flex flex-col group";
                 const imgUrl = article.imageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(article.title)}&background=0e7490&color=fff&size=512`;
                 
+                // FIXED: Moved Category Badge DOWN to text area so it doesn't block image
                 card.innerHTML = `
                     <div class="h-48 overflow-hidden relative">
                         <img src="${imgUrl}" onerror="this.src='https://placehold.co/600x400'" class="card-image w-full h-full object-cover group-hover:scale-105" alt="${article.title}">
-                        <div class="absolute top-2 left-2 bg-als-yellow text-als-navy text-xs font-bold px-2 py-1 rounded shadow">${article.category || 'News'}</div>
                     </div>
                     <div class="p-6 flex-1 flex flex-col">
+                        <div class="mb-3">
+                            <span class="inline-block bg-als-yellow text-als-navy text-xs font-bold px-2 py-1 rounded shadow">${article.category || 'News'}</span>
+                        </div>
+
                         <h4 class="font-serif text-xl font-bold mb-3 text-als-navy dark:text-slate-100 group-hover:text-als-teal line-clamp-2">${article.title}</h4>
                         <p class="text-slate-600 dark:text-slate-400 text-sm mb-4 line-clamp-3 flex-1">${article.excerpt || article.content.substring(0, 100) + '...'}</p>
                         <div class="pt-4 border-t border-slate-100 dark:border-slate-700 mt-auto flex justify-between items-center">
@@ -293,15 +294,71 @@
             });
         }
 
-        // --- Actions ---
+        // --- LIKE BUTTON LOGIC (FIXED) ---
+        window.toggleLike = async (id) => {
+            const btn = document.getElementById('like-btn');
+            const icon = btn.querySelector('i');
+            const countSpan = document.getElementById('like-count');
+            
+            // Check if already liked
+            const storageKey = `liked_${id}`;
+            if (localStorage.getItem(storageKey)) {
+                showToast("You already liked this!", "error");
+                return;
+            }
+
+            // Visual Update
+            icon.classList.remove('far'); 
+            icon.classList.add('fas', 'text-red-500'); 
+            btn.disabled = true;
+
+            try {
+                // Update Database
+                const docRef = doc(db, 'artifacts', appIdentifier, 'public', 'data', 'articles', id);
+                await updateDoc(docRef, { likes: increment(1) });
+                
+                // Save locally
+                localStorage.setItem(storageKey, "true");
+                
+                // Update number
+                let currentCount = parseInt(countSpan.innerText || "0");
+                countSpan.innerText = currentCount + 1;
+            } catch (e) {
+                console.error(e);
+                showToast("Error liking post", "error");
+            }
+        }
+
         window.viewArticle = (id) => {
             const article = articles.find(a => a.id === id);
             if (!article) return;
+            
+            // 1. Setup Image
+            const img = document.getElementById('modal-img');
+            img.src = article.imageUrl || '';
+            
+            // 2. Setup Like Button (FIXED)
+            const likeBtn = document.getElementById('like-btn');
+            const likeIcon = likeBtn.querySelector('i');
+            const likeCount = document.getElementById('like-count');
+            
+            likeBtn.disabled = false;
+            likeBtn.onclick = () => window.toggleLike(article.id);
+            likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
+            likeCount.innerText = article.likes || 0;
+
+            if (localStorage.getItem(`liked_${article.id}`)) {
+                likeIcon.classList.remove('far');
+                likeIcon.classList.add('fas', 'text-red-500');
+                likeBtn.classList.add('opacity-75');
+            }
+
+            // 3. Fill Content
             document.getElementById('modal-title').textContent = article.title;
             document.getElementById('modal-category').textContent = article.category || 'News';
             document.getElementById('modal-date').textContent = new Date(article.createdAt?.seconds * 1000).toLocaleDateString() || '';
-            document.getElementById('modal-img').src = article.imageUrl || '';
             document.getElementById('modal-content').innerHTML = article.content.split('\n').map(p => p.trim() ? `<p class="mb-4">${p}</p>` : '').join('');
+            
             document.getElementById('article-modal').classList.remove('hidden');
         }
 
@@ -366,6 +423,7 @@
                     showToast("Story Updated!");
                 } else {
                     data.createdAt = serverTimestamp();
+                    data.likes = 0; // Initialize likes
                     const colRef = collection(db, 'artifacts', appIdentifier, 'public', 'data', 'articles');
                     await addDoc(colRef, data);
                     showToast("Published!");
@@ -382,17 +440,14 @@
             document.getElementById('brand-tagline-input').value = siteSettings.tagline || '';
             document.getElementById('brand-hero-desc').value = siteSettings.heroDescription || '';
             
-            // Social Links
             document.getElementById('brand-fb-input').value = siteSettings.facebookUrl || '';
             document.getElementById('brand-tw-input').value = siteSettings.twitterUrl || '';
             document.getElementById('brand-ig-input').value = siteSettings.instagramUrl || '';
 
-            // Set Branding Type Radio
             const type = siteSettings.brandingType || 'standard';
             if (type === 'banner') document.getElementById('brand-type-banner').checked = true;
             else document.getElementById('brand-type-standard').checked = true;
             
-            // Set Static Hero Checkbox
             document.getElementById('brand-static-hero').checked = siteSettings.useStaticHero || false;
             
             toggleBrandingInputs();
@@ -469,7 +524,6 @@
 
         // Shared Image Logic
         window.toggleImageSource = (source, type) => {
-            // Types: 'post', 'logo', 'banner', 'hero'
             const prefix = type;
             const urlInput = document.getElementById(`${prefix}-img-input-url`);
             const dropZone = document.getElementById(`${prefix}-drop-zone`);
@@ -506,7 +560,6 @@
                         document.getElementById(targetId).value = canvas.toDataURL('image/jpeg', 0.8);
                         showToast("Image processed!");
                         
-                        // Visual feedback in drop zone
                         const parent = input.parentElement;
                         if(parent.id.includes('drop-zone')) {
                             parent.classList.add('border-als-teal', 'bg-slate-50');
@@ -520,7 +573,6 @@
             }
         }
 
-        // Drag and Drop Logic
         window.handleDragOver = (e) => {
             e.preventDefault();
             e.currentTarget.classList.add('border-als-teal', 'bg-slate-50');
@@ -560,9 +612,7 @@
             setTimeout(() => t.remove(), 3000);
         }
 
-        // This is a manual toggle for testing, can be removed if relying only on login page
         window.toggleAdmin = () => {
-             // If we force exit admin mode
              isAdminMode = false;
              localStorage.removeItem("isLoggedIn");
              window.location.reload();
@@ -611,7 +661,7 @@
 
     <main id="home-section" class="flex-grow container mx-auto px-4 py-12">
         <div class="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
-            <h3 class="text-2xl font-serif font-bold text-als-navy dark:text-white pl-4 border-l-4 border-als-yellow">Latest Updates</h3>
+            <h3 class="text-2xl font-serif font-bold text-als-navy dark:text-white">Latest Updates</h3>
             
             <div class="relative w-full max-w-xs">
                 <input type="text" id="search-input" oninput="window.filterArticles()" placeholder="Search stories..." class="w-full px-4 py-2 pl-10 rounded-full border border-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-als-teal focus:outline-none">
@@ -685,7 +735,7 @@
                 <a id="footer-login-link" href="login.html" class="text-slate-400 hover:text-white text-xs underline mt-2 block">Admin Login</a>
 
                 <span id="admin-controls" style="display: none;">
-                    <button onclick="logout()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded mt-2">Logout</button>
+                    <button onclick="window.toggleAdmin()" class="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-1 rounded mt-2">Logout</button>
                 </span>
             </div>
         </div>
@@ -849,17 +899,30 @@
         </div>
     </div>
 
-    <div id="article-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl my-8 relative">
-            <button onclick="window.closeModal()" class="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/20 hover:bg-white text-white hover:text-als-navy transition-colors flex items-center justify-center"><i class="fas fa-times"></i></button>
-            <div class="h-64 sm:h-80 overflow-hidden relative">
-                <img id="modal-img" src="" class="w-full h-full object-cover">
-                <div class="absolute bottom-0 left-0 w-full p-8 bg-gradient-to-t from-slate-900 to-transparent">
-                    <span id="modal-category" class="inline-block py-1 px-3 rounded-full bg-als-yellow text-als-navy text-xs font-bold tracking-wider mb-2"></span>
-                    <h2 id="modal-title" class="text-2xl sm:text-4xl font-serif font-bold text-white leading-tight"></h2>
-                    <p id="modal-date" class="text-slate-300 text-sm mt-2"></p>
-                </div>
+    <div id="article-modal" class="hidden fixed inset-0 z-50 flex justify-center bg-black/90 backdrop-blur-sm overflow-y-auto py-10 px-4">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl h-fit relative">
+            <button onclick="window.closeModal()" class="absolute -top-10 right-0 md:-right-10 text-white hover:text-als-yellow transition-colors">
+                <i class="fas fa-times text-2xl"></i>
+            </button>
+            <div class="h-64 sm:h-[500px] w-full bg-black relative group rounded-t-2xl overflow-hidden">
+                <img id="modal-img" src="" class="w-full h-full object-contain transition-opacity duration-300">
             </div>
+            <div class="px-8 sm:px-12 pt-8">
+                <div class="flex items-center justify-between mb-4">
+                    <span id="modal-category" class="inline-block py-1 px-3 rounded-full bg-als-yellow text-als-navy text-xs font-bold tracking-wider"></span>
+                    <span id="modal-date" class="text-slate-500 text-sm font-medium"></span>
+                </div>
+                <h2 id="modal-title" class="text-2xl sm:text-4xl font-serif font-bold text-als-navy dark:text-white leading-tight mb-2"></h2>
+            </div>
+            
+            <div class="px-8 sm:px-12 py-6 flex items-center border-b border-slate-100 dark:border-slate-700">
+                <button id="like-btn" class="group flex items-center space-x-2 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 px-4 py-2 rounded-full transition-all border border-slate-200 dark:border-slate-700">
+                    <i class="far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors"></i>
+                    <span id="like-count" class="font-bold text-slate-600 dark:text-slate-300">0</span>
+                </button>
+                <span class="ml-3 text-xs text-slate-400 uppercase tracking-wider font-bold">Likes</span>
+            </div>
+
             <div id="modal-content" class="p-8 sm:p-12 prose prose-lg dark:prose-invert max-w-none font-serif text-slate-700 dark:text-slate-300 leading-loose"></div>
             
             <div class="px-8 sm:px-12 pb-12">
@@ -870,6 +933,5 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
 </body>
 </html>
