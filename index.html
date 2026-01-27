@@ -311,29 +311,52 @@
             } catch (e) { console.error(e); }
         }
 
+        // --- Slideshow Logic ---
+        window.changeSlide = (direction) => {
+            if (typeof viewerImages === 'undefined' || viewerImages.length <= 1) return;
+            
+            viewerIndex += direction;
+            if (viewerIndex >= viewerImages.length) viewerIndex = 0;
+            if (viewerIndex < 0) viewerIndex = viewerImages.length - 1;
+
+            const img = document.getElementById('modal-img');
+            img.style.opacity = '0'; 
+            setTimeout(() => {
+                img.src = viewerImages[viewerIndex];
+                img.style.opacity = '1';
+                const counter = document.getElementById('modal-img-counter');
+                if(counter) counter.textContent = `${viewerIndex + 1} / ${viewerImages.length}`;
+            }, 200);
+        }
+
         window.viewArticle = (id) => {
             const article = articles.find(a => a.id === id);
             if (!article) return;
             
             // 1. Setup Images
-            viewerIndex = 0;
+            window.viewerIndex = 0;
+            window.viewerImages = []; 
+            
             if (article.images && Array.isArray(article.images) && article.images.length > 0) {
-                viewerImages = article.images;
+                window.viewerImages = article.images;
             } else {
-                viewerImages = [article.imageUrl || ''];
+                window.viewerImages = [article.imageUrl || ''];
             }
 
-            // 2. Setup Slideshow Buttons
+            // 2. Setup Buttons
             const prevBtn = document.getElementById('modal-prev-btn');
             const nextBtn = document.getElementById('modal-next-btn');
             const counter = document.getElementById('modal-img-counter');
+            const img = document.getElementById('modal-img');
 
-            if (viewerImages.length > 1) {
+            img.src = window.viewerImages[0];
+
+            if (window.viewerImages.length > 1) {
                 if(prevBtn) prevBtn.classList.remove('hidden');
                 if(nextBtn) nextBtn.classList.remove('hidden');
                 if(counter) {
                     counter.classList.remove('hidden');
-                    counter.textContent = `1 / ${viewerImages.length}`;
+                    counter.textContent = `1 / ${window.viewerImages.length}`;
                 }
             } else {
                 if(prevBtn) prevBtn.classList.add('hidden');
@@ -343,26 +366,28 @@
 
             // 3. Setup Like Button
             const likeBtn = document.getElementById('like-btn');
-            const likeIcon = likeBtn.querySelector('i');
-            const likeCount = document.getElementById('like-count');
-            likeBtn.disabled = false;
-            likeBtn.onclick = () => window.toggleLike(article.id);
-            likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
-            likeCount.innerText = article.likes || 0;
-
-            if (localStorage.getItem(`liked_${article.id}`)) {
-                likeIcon.classList.remove('far'); likeIcon.classList.add('fas', 'text-red-500'); likeBtn.classList.add('opacity-75');
+            if(likeBtn) {
+                const likeIcon = likeBtn.querySelector('i');
+                const likeCount = document.getElementById('like-count');
+                likeBtn.disabled = false;
+                likeBtn.onclick = () => window.toggleLike(article.id);
+                likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
+                likeCount.innerText = article.likes || 0;
+                if (localStorage.getItem(`liked_${article.id}`)) {
+                    likeIcon.classList.remove('far');
+                    likeIcon.classList.add('fas', 'text-red-500');
+                    likeBtn.classList.add('opacity-75');
+                }
             }
 
+            // 4. Fill Content
             document.getElementById('modal-title').textContent = article.title;
             document.getElementById('modal-category').textContent = article.category || 'News';
             document.getElementById('modal-date').textContent = new Date(article.createdAt?.seconds * 1000).toLocaleDateString() || '';
-            document.getElementById('modal-img').src = viewerImages[0];
             document.getElementById('modal-content').innerHTML = article.content.split('\n').map(p => p.trim() ? `<p class="mb-4">${p}</p>` : '').join('');
+            
             document.getElementById('article-modal').classList.remove('hidden');
         }
-
-        window.closeModal = () => document.getElementById('article-modal').classList.add('hidden');
 
         window.openPostForm = () => {
             editingArticleId = null; 
@@ -876,4 +901,5 @@
     </div>
 </body>
 </html>
+
 
