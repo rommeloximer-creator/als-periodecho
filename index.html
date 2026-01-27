@@ -16,6 +16,8 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // --- ADDED: Storage Imports ---
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // --- Configuration ---
         const firebaseConfig = {
@@ -28,13 +30,14 @@
         };
 
         const appId = new URLSearchParams(window.location.search).get('appId') || 'default-als-app';
-        let app, auth, db;
+        let app, auth, db, storage;
         
         try {
             const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
             app = initializeApp(config);
             auth = getAuth(app);
             db = getFirestore(app);
+            storage = getStorage(app); // --- ADDED: Init Storage ---
         } catch (e) { console.error("Firebase init error", e); }
 
         const appIdentifier = typeof __app_id !== 'undefined' ? __app_id : appId;
@@ -80,7 +83,11 @@
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                    await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
-                   await signInAnonymously(auth);
+                   // --- FIXED: Respect existing login session ---
+                   await auth.authStateReady();
+                   if (!auth.currentUser) {
+                       await signInAnonymously(auth);
+                   }
                 }
             } catch (error) { console.error("Auth Failed", error); }
 
@@ -243,10 +250,8 @@
             });
         }
 
-window.handleAddImage = () => {
+        window.handleAddImage = () => {
             if (typeof currentArticleImages === 'undefined') window.currentArticleImages = [];
-            
-            // Check remaining slots
             if (currentArticleImages.length >= 4) {
                 const msg = document.getElementById('image-limit-msg');
                 if(msg) { msg.classList.remove('hidden'); msg.textContent = "Max 4 images allowed."; }
@@ -254,7 +259,7 @@ window.handleAddImage = () => {
             }
 
             const source = document.querySelector('input[name="post-img-source"]:checked').value;
-
+            // For URL input, we just add the string
             if (source === 'url') {
                 const input = document.getElementById('post-img-input-url');
                 if(input.value.trim()) {
@@ -263,38 +268,9 @@ window.handleAddImage = () => {
                     renderImageManager();
                 }
             } else {
-                const input = document.getElementById('post-img-input-file');
-                if (input.files && input.files.length > 0) {
-                    // Check if selection fits in remaining slots
-                    const slotsLeft = 4 - currentArticleImages.length;
-                    if(input.files.length > slotsLeft) {
-                         alert(`You can only add ${slotsLeft} more image(s).`);
-                         return;
-                    }
-
-                    // Loop through ALL selected files
-                    Array.from(input.files).forEach(file => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                const ctx = canvas.getContext('2d');
-                                const MAX_WIDTH = 800; 
-                                let width = img.width; let height = img.height;
-                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                                canvas.width = width; canvas.height = height;
-                                ctx.drawImage(img, 0, 0, width, height);
-                                
-                                currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
-                                renderImageManager();
-                            };
-                            img.src = e.target.result;
-                        };
-                        reader.readAsDataURL(file);
-                    });
-                    input.value = ""; 
-                }
+                // For File upload, the 'processImageUpload' function handles it via the file input onchange event.
+                // We just trigger the hidden file input here.
+                document.getElementById('post-img-input-file').click();
             }
             const msg = document.getElementById('image-limit-msg');
             if(msg) msg.classList.add('hidden');
@@ -585,37 +561,37 @@ window.handleAddImage = () => {
             document.getElementById(targetId).value = input.value;
         }
 
+        // --- FIXED: Uploads directly to Firebase Storage ---
         window.processImageUpload = (input, targetId) => {
             if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        const MAX_WIDTH = 1200; 
-                        let width = img.width; let height = img.height;
-                        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                        canvas.width = width; canvas.height = height;
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        if(targetId === 'post-image') {
+                const file = input.files[0];
+                const storageRef = ref(storage, 'uploads/' + Date.now() + '_' + file.name);
+                
+                // Show loading state if possible
+                showToast("Uploading image...", "success");
+
+                uploadBytes(storageRef, file).then((snapshot) => {
+                    getDownloadURL(snapshot.ref).then((downloadURL) => {
+                         if(targetId === 'post-image' || targetId === 'post-img-input-file') {
                             if (typeof window.currentArticleImages === 'undefined') window.currentArticleImages = [];
-                            window.currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8));
+                            window.currentArticleImages.push(downloadURL);
                             input.value = ""; 
                             window.renderImageManager();
                         } else {
-                            document.getElementById(targetId).value = canvas.toDataURL('image/jpeg', 0.8);
+                            document.getElementById(targetId).value = downloadURL;
                         }
-                        showToast("Image processed!");
+                        showToast("Image Uploaded!");
+                        
+                        // Visual feedback for drop zones
                         const parent = input.parentElement;
                         if(parent.id.includes('drop-zone')) {
                             parent.classList.add('border-als-teal', 'bg-slate-50');
                         }
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(input.files[0]);
+                    });
+                }).catch(err => {
+                    console.error("Upload failed", err);
+                    showToast("Upload Failed", "error");
+                });
             }
         }
 
@@ -653,6 +629,13 @@ window.handleAddImage = () => {
              isAdminMode = false;
              localStorage.removeItem("isLoggedIn");
              window.location.reload();
+        }
+        
+        // Helper for changing password (uses Firebase now)
+        window.changePassword = () => {
+            // Since we use Firebase Auth, we direct them to a password reset flow or alert them.
+            // For simplicity in this script, we'll just show an alert, as full password reset UI is complex.
+            alert("To change your password, please use the Firebase Console or implement a password reset email flow.");
         }
 
         initApp();
@@ -799,7 +782,8 @@ window.handleAddImage = () => {
                         
                         <div class="flex gap-2">
                              <input type="url" id="post-img-input-url" placeholder="https://..." class="flex-1 px-3 py-1.5 text-sm rounded border dark:border-slate-600 dark:bg-slate-700 dark:text-white">
-<input type="file" id="post-img-input-file" accept="image/*" multiple class="hidden flex-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-als-teal file:text-white hover:file:bg-als-navy">                             <button type="button" onclick="window.handleAddImage()" class="px-4 py-1.5 bg-als-teal text-white text-xs font-bold rounded hover:bg-als-navy transition-colors"><i class="fas fa-plus"></i> Add</button>
+                             <input type="file" id="post-img-input-file" accept="image/*" onchange="window.processImageUpload(this, 'post-img-input-file')" class="hidden flex-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-als-teal file:text-white hover:file:bg-als-navy">
+                             <button type="button" onclick="window.handleAddImage()" class="px-4 py-1.5 bg-als-teal text-white text-xs font-bold rounded hover:bg-als-navy transition-colors"><i class="fas fa-plus"></i> Add</button>
                         </div>
                         <p id="image-limit-msg" class="text-[10px] text-red-500 mt-1 hidden">Maximum 4 images allowed.</p>
                         
@@ -918,4 +902,3 @@ window.handleAddImage = () => {
     </div>
 </body>
 </html>
-
