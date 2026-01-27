@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ALS PeriodECHO - SDO Pangasinan II</title>
     <meta name="description" content="Our Voice, Our Story, Our Journey. The official digital platform for ALS SDO Pangasinan II.">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +17,7 @@
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // --- Configuration ---
         const firebaseConfig = {
             apiKey: "AIzaSyCgvnHGxu_G5euXHrIoov07GxS08CtvG4Y",
             authDomain: "als-periodecho.firebaseapp.com",
@@ -27,6 +29,7 @@
 
         const appId = new URLSearchParams(window.location.search).get('appId') || 'default-als-app';
         let app, auth, db;
+        
         try {
             const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
             app = initializeApp(config);
@@ -36,7 +39,7 @@
 
         const appIdentifier = typeof __app_id !== 'undefined' ? __app_id : appId;
         
-        // --- State ---
+        // --- Global State ---
         let currentUser = null;
         let articles = [];
         let siteSettings = { 
@@ -46,23 +49,28 @@
         }; 
         let isAdminMode = false;
         
-        // Gallery State
+        // Gallery & Form State
         let editingArticleId = null;
         let currentArticleImages = []; 
         let viewerImages = [];
         let viewerIndex = 0;
 
-        // --- Init ---
+        // --- Initialization ---
         async function initApp() {
+            // Check Admin Mode
             if (localStorage.getItem("isLoggedIn") === "true") {
                 isAdminMode = true;
                 setTimeout(() => {
-                    document.getElementById('admin-section').classList.remove('hidden');
-                    document.getElementById('home-section').classList.add('hidden');
-                    document.getElementById('hero-section').classList.add('hidden');
+                    const adminSec = document.getElementById('admin-section');
+                    const homeSec = document.getElementById('home-section');
+                    const heroSec = document.getElementById('hero-section');
                     const controls = document.getElementById('admin-controls');
-                    if(controls) controls.style.display = 'inline';
                     const loginLink = document.getElementById('footer-login-link');
+
+                    if(adminSec) adminSec.classList.remove('hidden');
+                    if(homeSec) homeSec.classList.add('hidden');
+                    if(heroSec) heroSec.classList.add('hidden');
+                    if(controls) controls.style.display = 'inline';
                     if(loginLink) loginLink.style.display = 'none';
                 }, 500); 
             }
@@ -83,6 +91,8 @@
 
         function setupListeners() {
             if (!currentUser || !db) return;
+            
+            // Articles Listener
             const qArticles = collection(db, 'artifacts', appIdentifier, 'public', 'data', 'articles');
             onSnapshot(qArticles, (snapshot) => {
                 articles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -91,6 +101,8 @@
                 renderHomeFeed(); 
                 if (isAdminMode) renderAdminDashboard();
             });
+
+            // Settings Listener
             const docSettings = doc(db, 'artifacts', appIdentifier, 'public', 'data', 'settings', 'site_config');
             onSnapshot(docSettings, (docSnap) => {
                 if (docSnap.exists()) {
@@ -103,7 +115,7 @@
             });
         }
 
-        // --- Rendering ---
+        // --- Rendering Logic ---
         function renderBranding() {
             const container = document.getElementById('navbar-brand-area');
             if (siteSettings.brandingType === 'banner' && siteSettings.bannerUrl) {
@@ -209,28 +221,33 @@
             });
         }
 
-        // --- Multi-Image Logic for Admin ---
+        // --- Multi-Image Logic (Gallery Manager) ---
         window.renderImageManager = () => {
             const container = document.getElementById('image-manager-list');
             if(!container) return; 
             container.innerHTML = '';
             
+            if (typeof currentArticleImages === 'undefined') window.currentArticleImages = [];
+
             currentArticleImages.forEach((url, index) => {
                 const div = document.createElement('div');
-                div.className = "relative group aspect-square bg-slate-100 rounded overflow-hidden border border-slate-200";
+                div.className = "relative group aspect-square bg-slate-100 rounded overflow-hidden border border-slate-200 shadow-sm";
                 div.innerHTML = `
                     <img src="${url}" class="w-full h-full object-cover">
-                    <button type="button" onclick="window.removeImage(${index})" class="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"><i class="fas fa-times"></i></button>
-                    ${index === 0 ? '<span class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] text-center py-0.5">Cover</span>' : ''}
+                    <button type="button" onclick="window.removeImage(${index})" class="absolute top-1 right-1 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs shadow-md transition-transform transform hover:scale-110">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    ${index === 0 ? '<span class="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] text-center py-1 font-bold tracking-wide">COVER</span>' : ''}
                 `;
                 container.appendChild(div);
             });
         }
 
         window.handleAddImage = () => {
+            if (typeof currentArticleImages === 'undefined') window.currentArticleImages = [];
             if (currentArticleImages.length >= 4) {
                 const msg = document.getElementById('image-limit-msg');
-                if(msg) msg.classList.remove('hidden');
+                if(msg) { msg.classList.remove('hidden'); msg.textContent = "Max 4 images allowed."; }
                 return;
             }
 
@@ -257,6 +274,7 @@
                             if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
                             canvas.width = width; canvas.height = height;
                             ctx.drawImage(img, 0, 0, width, height);
+                            
                             currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
                             input.value = ""; 
                             renderImageManager();
@@ -273,13 +291,12 @@
         window.removeImage = (index) => {
             currentArticleImages.splice(index, 1);
             renderImageManager();
-            const msg = document.getElementById('image-limit-msg');
-            if(msg) msg.classList.add('hidden');
         }
 
-        // --- Slideshow Logic for Viewer ---
+        // --- Slideshow & Viewer Logic ---
         window.changeSlide = (direction) => {
-            if (viewerImages.length <= 1) return;
+            if (typeof viewerImages === 'undefined' || viewerImages.length <= 1) return;
+            
             viewerIndex += direction;
             if (viewerIndex >= viewerImages.length) viewerIndex = 0;
             if (viewerIndex < 0) viewerIndex = viewerImages.length - 1;
@@ -289,18 +306,85 @@
             setTimeout(() => {
                 img.src = viewerImages[viewerIndex];
                 img.style.opacity = '1';
+                const counter = document.getElementById('modal-img-counter');
+                if(counter) counter.textContent = `${viewerIndex + 1} / ${viewerImages.length}`;
             }, 200);
         }
 
-        // --- LIKE BUTTON LOGIC ---
+        window.viewArticle = (id) => {
+            const article = articles.find(a => a.id === id);
+            if (!article) return;
+            
+            // 1. Setup Images
+            window.viewerIndex = 0;
+            window.viewerImages = []; 
+            if (article.images && Array.isArray(article.images) && article.images.length > 0) {
+                window.viewerImages = article.images;
+            } else {
+                window.viewerImages = [article.imageUrl || ''];
+            }
+
+            // 2. Setup Slideshow
+            const prevBtn = document.getElementById('modal-prev-btn');
+            const nextBtn = document.getElementById('modal-next-btn');
+            const counter = document.getElementById('modal-img-counter');
+            const img = document.getElementById('modal-img');
+
+            img.src = window.viewerImages[0];
+
+            if (window.viewerImages.length > 1) {
+                if(prevBtn) prevBtn.classList.remove('hidden');
+                if(nextBtn) nextBtn.classList.remove('hidden');
+                if(counter) {
+                    counter.classList.remove('hidden');
+                    counter.textContent = `1 / ${window.viewerImages.length}`;
+                }
+            } else {
+                if(prevBtn) prevBtn.classList.add('hidden');
+                if(nextBtn) nextBtn.classList.add('hidden');
+                if(counter) counter.classList.add('hidden');
+            }
+
+            // 3. Setup Like Button
+            const likeBtn = document.getElementById('like-btn');
+            if(likeBtn) {
+                const likeIcon = likeBtn.querySelector('i');
+                const likeCount = document.getElementById('like-count');
+                
+                likeBtn.disabled = false;
+                likeBtn.onclick = () => window.toggleLike(article.id);
+                likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
+                likeCount.innerText = article.likes || 0;
+
+                if (localStorage.getItem(`liked_${article.id}`)) {
+                    likeIcon.classList.remove('far');
+                    likeIcon.classList.add('fas', 'text-red-500');
+                    likeBtn.classList.add('opacity-75');
+                }
+            }
+
+            // 4. Fill Content
+            document.getElementById('modal-title').textContent = article.title;
+            document.getElementById('modal-category').textContent = article.category || 'News';
+            document.getElementById('modal-date').textContent = new Date(article.createdAt?.seconds * 1000).toLocaleDateString() || '';
+            document.getElementById('modal-content').innerHTML = article.content.split('\n').map(p => p.trim() ? `<p class="mb-4">${p}</p>` : '').join('');
+            
+            document.getElementById('article-modal').classList.remove('hidden');
+        }
+
+        window.closeModal = () => document.getElementById('article-modal').classList.add('hidden');
+
+        // --- Like Logic ---
         window.toggleLike = async (id) => {
             const btn = document.getElementById('like-btn');
             const icon = btn.querySelector('i');
             const countSpan = document.getElementById('like-count');
             const storageKey = `liked_${id}`;
+            
             if (localStorage.getItem(storageKey)) {
                 showToast("You already liked this!", "error"); return;
             }
+            
             icon.classList.remove('far'); icon.classList.add('fas', 'text-red-500'); btn.disabled = true;
             try {
                 const docRef = doc(db, 'artifacts', appIdentifier, 'public', 'data', 'articles', id);
@@ -311,99 +395,7 @@
             } catch (e) { console.error(e); }
         }
 
-        window.viewArticle = (id) => {
-            const article = articles.find(a => a.id === id);
-            if (!article) return;
-            
-            // 1. Setup Images
-            viewerIndex = 0;
-            if (article.images && Array.isArray(article.images) && article.images.length > 0) {
-                viewerImages = article.images;
-            } else {
-                viewerImages = [article.imageUrl || ''];
-            }
-
-            // 2. Setup Slideshow Buttons
-            const prevBtn = document.getElementById('modal-prev-btn');
-            const nextBtn = document.getElementById('modal-next-btn');
-            const counter = document.getElementById('modal-img-counter');
-
-            if (viewerImages.length > 1) {
-                if(prevBtn) prevBtn.classList.remove('hidden');
-                if(nextBtn) nextBtn.classList.remove('hidden');
-                if(counter) {
-                    counter.classList.remove('hidden');
-                    counter.textContent = `1 / ${viewerImages.length}`;
-                }
-            } else {
-                if(prevBtn) prevBtn.classList.add('hidden');
-                if(nextBtn) nextBtn.classList.add('hidden');
-                if(counter) counter.classList.add('hidden');
-            }
-
-            // 3. Setup Like Button
-            const likeBtn = document.getElementById('like-btn');
-            const likeIcon = likeBtn.querySelector('i');
-            const likeCount = document.getElementById('like-count');
-            likeBtn.disabled = false;
-            likeBtn.onclick = () => window.toggleLike(article.id);
-            likeIcon.className = "far fa-heart text-xl text-slate-400 group-hover:text-red-500 transition-colors";
-            likeCount.innerText = article.likes || 0;
-
-            if (localStorage.getItem(`liked_${article.id}`)) {
-                likeIcon.classList.remove('far'); likeIcon.classList.add('fas', 'text-red-500'); likeBtn.classList.add('opacity-75');
-            }
-
-            document.getElementById('modal-title').textContent = article.title;
-            document.getElementById('modal-category').textContent = article.category || 'News';
-            document.getElementById('modal-date').textContent = new Date(article.createdAt?.seconds * 1000).toLocaleDateString() || '';
-            document.getElementById('modal-img').src = viewerImages[0];
-            document.getElementById('modal-content').innerHTML = article.content.split('\n').map(p => p.trim() ? `<p class="mb-4">${p}</p>` : '').join('');
-            document.getElementById('article-modal').classList.remove('hidden');
-        }
-
-        window.closeModal = () => document.getElementById('article-modal').classList.add('hidden');
-
-        window.openPostForm = () => {
-            editingArticleId = null; 
-            document.getElementById('form-modal-title').textContent = "Write New Story";
-            document.getElementById('form-submit-btn').textContent = "Publish Story";
-            document.getElementById('new-post-form').reset();
-            currentArticleImages = [];
-            window.renderImageManager();
-            document.querySelector('input[name="post-img-source"][value="url"]').click();
-            document.getElementById('post-form-modal').classList.remove('hidden');
-        }
-
-        window.editArticle = (id) => {
-            const article = articles.find(a => a.id === id);
-            if (!article) return;
-            editingArticleId = id; 
-            document.getElementById('form-modal-title').textContent = "Edit Story";
-            document.getElementById('form-submit-btn').textContent = "Update Story";
-            document.getElementById('post-title').value = article.title;
-            document.getElementById('post-category').value = article.category;
-            document.getElementById('post-excerpt').value = article.excerpt;
-            document.getElementById('post-content').value = article.content;
-            
-            if (article.images && Array.isArray(article.images)) {
-                currentArticleImages = article.images;
-            } else if (article.imageUrl) {
-                currentArticleImages = [article.imageUrl];
-            } else {
-                currentArticleImages = [];
-            }
-            window.renderImageManager();
-            document.querySelector('input[name="post-img-source"][value="url"]').click();
-            document.getElementById('post-form-modal').classList.remove('hidden');
-        }
-
-        window.closePostForm = () => {
-            document.getElementById('post-form-modal').classList.add('hidden');
-            document.getElementById('new-post-form').reset();
-            editingArticleId = null;
-        }
-
+        // --- Form Submission ---
         window.submitPost = async (event) => {
             event.preventDefault();
             const btn = event.target.querySelector('button[type="submit"]');
@@ -415,8 +407,8 @@
                     category: document.getElementById('post-category').value,
                     excerpt: document.getElementById('post-excerpt').value,
                     content: document.getElementById('post-content').value,
-                    images: currentArticleImages,
-                    imageUrl: currentArticleImages.length > 0 ? currentArticleImages[0] : null,
+                    images: window.currentArticleImages || [],
+                    imageUrl: (window.currentArticleImages && window.currentArticleImages.length > 0) ? window.currentArticleImages[0] : null,
                     updatedAt: serverTimestamp()
                 };
 
@@ -434,6 +426,47 @@
                 window.closePostForm();
             } catch (err) { console.error(err); showToast("Error saving", "error"); } 
             finally { btn.innerHTML = originalText; btn.disabled = false; }
+        }
+
+        // --- Helper Functions ---
+        window.openPostForm = () => {
+            editingArticleId = null; 
+            document.getElementById('form-modal-title').textContent = "Write New Story";
+            document.getElementById('form-submit-btn').textContent = "Publish Story";
+            document.getElementById('new-post-form').reset();
+            window.currentArticleImages = []; // Reset
+            window.renderImageManager();
+            document.querySelector('input[name="post-img-source"][value="url"]').click();
+            document.getElementById('post-form-modal').classList.remove('hidden');
+        }
+
+        window.editArticle = (id) => {
+            const article = articles.find(a => a.id === id);
+            if (!article) return;
+            editingArticleId = id; 
+            document.getElementById('form-modal-title').textContent = "Edit Story";
+            document.getElementById('form-submit-btn').textContent = "Update Story";
+            document.getElementById('post-title').value = article.title;
+            document.getElementById('post-category').value = article.category;
+            document.getElementById('post-excerpt').value = article.excerpt;
+            document.getElementById('post-content').value = article.content;
+            
+            if (article.images && Array.isArray(article.images)) {
+                window.currentArticleImages = article.images;
+            } else if (article.imageUrl) {
+                window.currentArticleImages = [article.imageUrl];
+            } else {
+                window.currentArticleImages = [];
+            }
+            window.renderImageManager();
+            document.querySelector('input[name="post-img-source"][value="url"]').click();
+            document.getElementById('post-form-modal').classList.remove('hidden');
+        }
+
+        window.closePostForm = () => {
+            document.getElementById('post-form-modal').classList.add('hidden');
+            document.getElementById('new-post-form').reset();
+            editingArticleId = null;
         }
 
         window.openBrandingForm = () => {
@@ -555,9 +588,10 @@
                         ctx.drawImage(img, 0, 0, width, height);
                         
                         if(targetId === 'post-image') {
-                            currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8));
+                            if (typeof window.currentArticleImages === 'undefined') window.currentArticleImages = [];
+                            window.currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8));
                             input.value = ""; 
-                            renderImageManager();
+                            window.renderImageManager();
                         } else {
                             document.getElementById(targetId).value = canvas.toDataURL('image/jpeg', 0.8);
                         }
@@ -745,7 +779,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Images (Max 4)</label>
+                        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Gallery Images (Max 4)</label>
                         <div class="flex space-x-4 mb-2 text-sm">
                             <label class="flex items-center space-x-2 cursor-pointer"><input type="radio" name="post-img-source" value="url" checked onclick="toggleImageSource('url', 'post')" class="accent-als-teal"><span class="dark:text-slate-300">Link</span></label>
                             <label class="flex items-center space-x-2 cursor-pointer"><input type="radio" name="post-img-source" value="upload" onclick="toggleImageSource('upload', 'post')" class="accent-als-teal"><span class="dark:text-slate-300">Upload</span></label>
