@@ -245,8 +245,12 @@
 
         window.handleAddImage = () => {
             if (typeof currentArticleImages === 'undefined') window.currentArticleImages = [];
+            
+            // Get message element reference
+            const msg = document.getElementById('image-limit-msg');
+            
+            // Global check: if already full
             if (currentArticleImages.length >= 4) {
-                const msg = document.getElementById('image-limit-msg');
                 if(msg) { msg.classList.remove('hidden'); msg.textContent = "Max 4 images allowed."; }
                 return;
             }
@@ -259,33 +263,48 @@
                     currentArticleImages.push(input.value.trim());
                     input.value = ""; 
                     renderImageManager();
+                    if(msg) msg.classList.add('hidden');
                 }
             } else {
                 const input = document.getElementById('post-img-input-file');
-                if (input.files && input.files[0]) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const img = new Image();
-                        img.onload = () => {
-                            const canvas = document.createElement('canvas');
-                            const ctx = canvas.getContext('2d');
-                            const MAX_WIDTH = 800; 
-                            let width = img.width; let height = img.height;
-                            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                            canvas.width = width; canvas.height = height;
-                            ctx.drawImage(img, 0, 0, width, height);
-                            
-                            currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
-                            input.value = ""; 
-                            renderImageManager();
+                if (input.files && input.files.length > 0) {
+                    
+                    // Check if new files fit into remaining slots
+                    const slotsLeft = 4 - currentArticleImages.length;
+                    if (input.files.length > slotsLeft) {
+                        if(msg) { 
+                            msg.classList.remove('hidden'); 
+                            msg.textContent = `You selected ${input.files.length} images, but only have ${slotsLeft} slot(s) left.`; 
+                        }
+                        return;
+                    }
+
+                    // Process ALL selected files
+                    Array.from(input.files).forEach(file => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                const MAX_WIDTH = 800; 
+                                let width = img.width; let height = img.height;
+                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                                canvas.width = width; canvas.height = height;
+                                ctx.drawImage(img, 0, 0, width, height);
+                                
+                                currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
+                                renderImageManager();
+                            };
+                            img.src = e.target.result;
                         };
-                        img.src = e.target.result;
-                    };
-                    reader.readAsDataURL(input.files[0]);
+                        reader.readAsDataURL(file);
+                    });
+                    
+                    input.value = ""; // Clear input after processing
+                    if(msg) msg.classList.add('hidden');
                 }
             }
-            const msg = document.getElementById('image-limit-msg');
-            if(msg) msg.classList.add('hidden');
         }
 
         window.removeImage = (index) => {
@@ -788,62 +807,8 @@
                         <div class="flex gap-2">
                              <input type="url" id="post-img-input-url" placeholder="https://..." class="flex-1 px-3 py-1.5 text-sm rounded border dark:border-slate-600 dark:bg-slate-700 dark:text-white">
                              <input type="file" id="post-img-input-file" accept="image/*" multiple class="hidden flex-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-als-teal file:text-white hover:file:bg-als-navy">
-window.handleAddImage = () => {
-            if (typeof currentArticleImages === 'undefined') window.currentArticleImages = [];
-            
-            // Check remaining slots
-            if (currentArticleImages.length >= 4) {
-                const msg = document.getElementById('image-limit-msg');
-                if(msg) { msg.classList.remove('hidden'); msg.textContent = "Max 4 images allowed."; }
-                return;
-            }
-
-            const source = document.querySelector('input[name="post-img-source"]:checked').value;
-
-            if (source === 'url') {
-                const input = document.getElementById('post-img-input-url');
-                if(input.value.trim()) {
-                    currentArticleImages.push(input.value.trim());
-                    input.value = ""; 
-                    renderImageManager();
-                }
-            } else {
-                const input = document.getElementById('post-img-input-file');
-                if (input.files && input.files.length > 0) {
-                    // Check if selection fits in remaining slots
-                    const slotsLeft = 4 - currentArticleImages.length;
-                    if(input.files.length > slotsLeft) {
-                         alert(`You can only add ${slotsLeft} more image(s).`);
-                         return;
-                    }
-
-                    // Loop through ALL selected files
-                    Array.from(input.files).forEach(file => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                const ctx = canvas.getContext('2d');
-                                const MAX_WIDTH = 800; 
-                                let width = img.width; let height = img.height;
-                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                                canvas.width = width; canvas.height = height;
-                                ctx.drawImage(img, 0, 0, width, height);
-                                
-                                currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
-                                renderImageManager();
-                            };
-                            img.src = e.target.result;
-                        };
-                        reader.readAsDataURL(file);
-                    });
-                    input.value = ""; 
-                }
-            }
-            const msg = document.getElementById('image-limit-msg');
-            if(msg) msg.classList.add('hidden');
-        }                        </div>
+                             <button type="button" onclick="window.handleAddImage()" class="px-4 py-1.5 bg-als-teal text-white text-xs font-bold rounded hover:bg-als-navy transition-colors"><i class="fas fa-plus"></i> Add</button>
+                        </div>
                         <p id="image-limit-msg" class="text-[10px] text-red-500 mt-1 hidden">Maximum 4 images allowed.</p>
                         
                         <div id="image-manager-list" class="grid grid-cols-4 gap-2 mt-3"></div>
@@ -961,4 +926,3 @@ window.handleAddImage = () => {
     </div>
 </body>
 </html>
-
