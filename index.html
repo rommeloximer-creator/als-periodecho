@@ -13,22 +13,82 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <script type="module">
-    // --- IMPORT THE NEW FILES HERE ---
-    import { auth, db } from "./firebase-config.js";
-    import { processAndUploadFiles } from "./upload-manager.js";
-    
-    // Import Firestore functions needed for this specific page
-    import { collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, increment, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // --- Configuration ---
-    // (You can keep the appId logic below)
-    const appId = new URLSearchParams(window.location.search).get('appId') || 'default-als-app';
-    const appIdentifier = typeof __app_id !== 'undefined' ? __app_id : appId;
+        // --- Configuration ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCgvnHGxu_G5euXHrIoov07GxS08CtvG4Y",
+            authDomain: "als-periodecho.firebaseapp.com",
+            projectId: "als-periodecho",
+            storageBucket: "als-periodecho.firebasestorage.app",
+            messagingSenderId: "969937604443",
+            appId: "1:969937604443:web:fead3fe0aa71a6f2d7147e"
+        };
 
-    // --- Global State ---
-    let currentUser = null;
-    let articles = [];
-    // ... continue with the rest of your app logic ...
+        const appId = new URLSearchParams(window.location.search).get('appId') || 'default-als-app';
+        let app, auth, db;
+        
+        try {
+            const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
+            app = initializeApp(config);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) { console.error("Firebase init error", e); }
+
+        const appIdentifier = typeof __app_id !== 'undefined' ? __app_id : appId;
+        
+        // --- Global State ---
+        let currentUser = null;
+        let articles = [];
+        let siteSettings = { 
+            logoUrl: null, bannerUrl: null, title: 'PeriodECHO', subtitle: 'SDO Pangasinan II', tagline: '', 
+            brandingType: 'banner', useStaticHero: true, heroUrl: null, heroDescription: 'Your digital platform.',
+            facebookUrl: '', twitterUrl: '', instagramUrl: ''
+        }; 
+        let isAdminMode = false;
+        
+        // Gallery & Form State
+        let editingArticleId = null;
+        let currentArticleImages = []; 
+        let viewerImages = [];
+        let viewerIndex = 0;
+
+        // --- Initialization ---
+        async function initApp() {
+            // Check Admin Mode
+            if (localStorage.getItem("isLoggedIn") === "true") {
+                isAdminMode = true;
+                setTimeout(() => {
+                    const adminSec = document.getElementById('admin-section');
+                    const homeSec = document.getElementById('home-section');
+                    const heroSec = document.getElementById('hero-section');
+                    const controls = document.getElementById('admin-controls');
+                    const loginLink = document.getElementById('footer-login-link');
+
+                    if(adminSec) adminSec.classList.remove('hidden');
+                    if(homeSec) homeSec.classList.add('hidden');
+                    if(heroSec) heroSec.classList.add('hidden');
+                    if(controls) controls.style.display = 'inline';
+                    if(loginLink) loginLink.style.display = 'none';
+                }, 500); 
+            }
+
+            if (!auth) return;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                   await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                   await signInAnonymously(auth);
+                }
+            } catch (error) { console.error("Auth Failed", error); }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) { currentUser = user; setupListeners(); }
+            });
+        }
+
         function setupListeners() {
             if (!currentUser || !db) return;
             
@@ -185,12 +245,8 @@
 
         window.handleAddImage = () => {
             if (typeof currentArticleImages === 'undefined') window.currentArticleImages = [];
-            
-            // Get message element reference
-            const msg = document.getElementById('image-limit-msg');
-            
-            // Global check: if already full
             if (currentArticleImages.length >= 4) {
+                const msg = document.getElementById('image-limit-msg');
                 if(msg) { msg.classList.remove('hidden'); msg.textContent = "Max 4 images allowed."; }
                 return;
             }
@@ -203,48 +259,33 @@
                     currentArticleImages.push(input.value.trim());
                     input.value = ""; 
                     renderImageManager();
-                    if(msg) msg.classList.add('hidden');
                 }
             } else {
                 const input = document.getElementById('post-img-input-file');
-                if (input.files && input.files.length > 0) {
-                    
-                    // Check if new files fit into remaining slots
-                    const slotsLeft = 4 - currentArticleImages.length;
-                    if (input.files.length > slotsLeft) {
-                        if(msg) { 
-                            msg.classList.remove('hidden'); 
-                            msg.textContent = `You selected ${input.files.length} images, but only have ${slotsLeft} slot(s) left.`; 
-                        }
-                        return;
-                    }
-
-                    // Process ALL selected files
-                    Array.from(input.files).forEach(file => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                const ctx = canvas.getContext('2d');
-                                const MAX_WIDTH = 800; 
-                                let width = img.width; let height = img.height;
-                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-                                canvas.width = width; canvas.height = height;
-                                ctx.drawImage(img, 0, 0, width, height);
-                                
-                                currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
-                                renderImageManager();
-                            };
-                            img.src = e.target.result;
+                if (input.files && input.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            const MAX_WIDTH = 800; 
+                            let width = img.width; let height = img.height;
+                            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                            canvas.width = width; canvas.height = height;
+                            ctx.drawImage(img, 0, 0, width, height);
+                            
+                            currentArticleImages.push(canvas.toDataURL('image/jpeg', 0.8)); 
+                            input.value = ""; 
+                            renderImageManager();
                         };
-                        reader.readAsDataURL(file);
-                    });
-                    
-                    input.value = ""; // Clear input after processing
-                    if(msg) msg.classList.add('hidden');
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(input.files[0]);
                 }
             }
+            const msg = document.getElementById('image-limit-msg');
+            if(msg) msg.classList.add('hidden');
         }
 
         window.removeImage = (index) => {
@@ -746,7 +787,7 @@
                         
                         <div class="flex gap-2">
                              <input type="url" id="post-img-input-url" placeholder="https://..." class="flex-1 px-3 py-1.5 text-sm rounded border dark:border-slate-600 dark:bg-slate-700 dark:text-white">
-                             <input type="file" id="post-img-input-file" accept="image/*" multiple class="hidden flex-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-als-teal file:text-white hover:file:bg-als-navy">
+                             <input type="file" id="post-img-input-file" accept="image/*" class="hidden flex-1 text-sm text-slate-500 file:mr-4 file:py-1 file:px-2 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-als-teal file:text-white hover:file:bg-als-navy">
                              <button type="button" onclick="window.handleAddImage()" class="px-4 py-1.5 bg-als-teal text-white text-xs font-bold rounded hover:bg-als-navy transition-colors"><i class="fas fa-plus"></i> Add</button>
                         </div>
                         <p id="image-limit-msg" class="text-[10px] text-red-500 mt-1 hidden">Maximum 4 images allowed.</p>
@@ -866,4 +907,3 @@
     </div>
 </body>
 </html>
-
